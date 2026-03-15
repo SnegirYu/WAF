@@ -1,0 +1,18 @@
+# Виртуальное окружение
+venv/
+.venv/
+env/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# База данных (если вдруг решишь использовать SQLite)
+*.sqlite3
+
+# Настройки VS Code
+.vscode/
+
+# Секретные данные
+.env
