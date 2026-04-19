@@ -58,6 +58,25 @@ class ProtectedSite(models.Model):
         verbose_name = 'Защищённый сайт'
         verbose_name_plural = 'Защищённые сайты'
 
+class TrafficStats(models.Model):
+    """Статистика трафика по дням"""
+    site = models.ForeignKey(ProtectedSite, on_delete=models.CASCADE, related_name='traffic_stats')
+    date = models.DateField(auto_now_add=True)
+    bytes_in = models.BigIntegerField(default=0, verbose_name='Входящий трафик (байт)')
+    bytes_out = models.BigIntegerField(default=0, verbose_name='Исходящий трафик (байт)')
+    
+    class Meta:
+        unique_together = ('site', 'date')
+        verbose_name = 'Статистика трафика'
+        verbose_name_plural = 'Статистика трафика'
+        ordering = ['-date']
+    
+    @property
+    def total_mb(self):
+        return (self.bytes_in + self.bytes_out) / (1024 * 1024)
+    
+    def __str__(self):
+        return f"{self.site.domain} - {self.date}: {self.total_mb:.2f} MB"
 
 class WAFRule(models.Model):
     SEVERITY_CHOICES = [
