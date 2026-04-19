@@ -1,0 +1,12 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Регистрация в WAF</title>
+</head>
+<body>
+    <h2>Создать аккаунт</h2>
+    <form method="post">
+        {% csrf_token %} {{ form.as_p }}  <button type="submit">Зарегистрироваться</button>
+    </form>
+</body>
+</html>

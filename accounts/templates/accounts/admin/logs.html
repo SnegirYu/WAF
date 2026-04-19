@@ -1,0 +1,33 @@
+{% extends "accounts/admin/base.html" %}
+{% block title %}Логи{% endblock %}
+{% block page_title %}Логи запросов{% endblock %}
+{% block content %}
+<div class="card">
+  <div class="card-title">Последние 500 запросов</div>
+  {% if logs %}
+  <div style="overflow-x:auto;">
+  <table style="font-size:12px;">
+    <thead><tr><th>Время</th><th>IP</th><th>Метод</th><th>Путь</th><th>Код</th><th>Сайт</th><th>Заблокирован</th><th>Правило</th></tr></thead>
+    <tbody>
+    {% for log in logs %}
+    <tr>
+      <td style="color:#64748b;white-space:nowrap;">{{ log.timestamp|date:"d.m H:i:s" }}</td>
+      <td style="font-family:monospace;">{{ log.ip_address }}</td>
+      <td><span class="badge {% if log.method == 'GET' %}badge-green{% elif log.method == 'POST' %}badge-blue{% else %}badge-yellow{% endif %}">{{ log.method }}</span></td>
+      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ log.path }}">{{ log.path }}</td>
+      <td>
+        <span class="badge {% if log.status_code < 300 %}badge-green{% elif log.status_code < 400 %}badge-yellow{% else %}badge-red{% endif %}">{{ log.status_code }}</span>
+      </td>
+      <td style="color:#94a3b8;">{{ log.site.domain|default:"—" }}</td>
+      <td>{% if log.was_blocked %}<span class="badge badge-red">Да</span>{% else %}<span style="color:#64748b;">—</span>{% endif %}</td>
+      <td style="color:#94a3b8;">{{ log.rule_triggered.name|default:"—"|truncatechars:20 }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <p style="color:#64748b;text-align:center;padding:24px;">Логов пока нет</p>
+  {% endif %}
+</div>
+{% endblock %}
