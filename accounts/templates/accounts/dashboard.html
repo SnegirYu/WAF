@@ -57,6 +57,9 @@
     .btn-outline { background: transparent; color: #6366f1; border: 1px solid #6366f1; }
     .btn-outline:hover { background: #6366f1; color: #fff; }
     .btn-sm { padding: 5px 12px; font-size: 12px; }
+    .btn-danger { background: #ef4444; color: #fff; }
+    .btn-danger:hover { background: #dc2626; }
+    .site-row-actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
     .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
     .status-on { background: #22c55e; box-shadow: 0 0 6px #22c55e; }
     .status-off { background: #ef4444; }
@@ -64,7 +67,20 @@
     .contact-form textarea:focus { outline: none; border-color: #6366f1; }
     .alert { padding: 10px 14px; border-radius: 6px; margin-bottom: 14px; font-size: 13px; }
     .alert-success { background: #14532d; color: #4ade80; border: 1px solid #166534; }
+    .alert-error { background: #3f1b1b; color: #fca5a5; border: 1px solid #7f1d1d; }
+    .alert-warning { background: #422006; color: #fbbf24; border: 1px solid #78350f; }
+    .limit-bar-wrap { background: #0f1117; border-radius: 6px; height: 8px; overflow: hidden; margin-top: 8px; }
+    .limit-bar { height: 100%; border-radius: 6px; transition: width .4s; }
+    .limit-bar.ok    { background: #22c55e; }
+    .limit-bar.warn  { background: #f59e0b; }
+    .limit-bar.full  { background: #ef4444; }
+    .limit-badge { display: inline-block; padding: 2px 9px; border-radius: 12px; font-size: 11px; font-weight: 600; margin-left: 8px; }
+    .limit-badge.ok   { background: #14532d; color: #4ade80; }
+    .limit-badge.warn { background: #422006; color: #fbbf24; }
+    .limit-badge.full { background: #3f1b1b; color: #fca5a5; }
     .logout-form { display: inline; }
+    .input-field { width: 100%; background: #0f1117; border: 1px solid #2d3250; border-radius: 8px; padding: 10px 14px; color: #e2e8f0; font-size: 13px; }
+    .input-field:focus { outline: none; border-color: #6366f1; }
   </style>
 </head>
 <body>
@@ -89,7 +105,7 @@
 
   {% if messages %}
     {% for msg in messages %}
-      <div class="alert alert-success">{{ msg }}</div>
+      <div class="alert {% if msg.tags == 'error' %}alert-error{% else %}alert-success{% endif %}">{{ msg }}</div>
     {% endfor %}
   {% endif %}
 
@@ -156,30 +172,104 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
         Тарифный план
       </div>
+
       {% if user.tariff_plan == 'pro' %}
         <div class="info-row"><span class="info-label">Текущий план</span><span class="info-value" style="color:#c084fc;">Pro</span></div>
-        <div class="info-row"><span class="info-label">Сайтов</span><span class="info-value">До 20</span></div>
-        <div class="info-row"><span class="info-label">Трафик</span><span class="info-value">До 100 ГБ/мес</span></div>
-        <div class="info-row"><span class="info-label">Поддержка</span><span class="info-value">Электронная почта</span></div>
       {% elif user.tariff_plan == 'free' %}
         <div class="info-row"><span class="info-label">Текущий план</span><span class="info-value" style="color:#94a3b8;">Бесплатный</span></div>
-        <div class="info-row"><span class="info-label">Сайтов</span><span class="info-value">1</span></div>
-        <div class="info-row"><span class="info-label">Трафик</span><span class="info-value">До 1 ГБ/мес</span></div>
-        <div class="info-row"><span class="info-label">Поддержка</span><span class="info-value">Сообщество</span></div>
       {% else %}
         <div class="info-row"><span class="info-label">Текущий план</span><span class="info-value" style="color:#60a5fa;">Базовый</span></div>
-        <div class="info-row"><span class="info-label">Сайтов</span><span class="info-value">До 5</span></div>
-        <div class="info-row"><span class="info-label">Трафик</span><span class="info-value">До 10 ГБ/мес</span></div>
-        <div class="info-row"><span class="info-label">Поддержка</span><span class="info-value">Стандартная</span></div>
       {% endif %}
+
+      <!-- Лимит сайтов -->
+      <div class="info-row" style="flex-direction:column;align-items:flex-start;gap:6px;">
+        <div style="display:flex;justify-content:space-between;width:100%;">
+          <span class="info-label">Сайты</span>
+          <span class="info-value">
+            {{ sites_count }} / {{ sites_limit }}
+            {% if sites_at_limit %}
+              <span class="limit-badge full">лимит</span>
+            {% elif sites_count >= sites_limit|add:"-1" and sites_limit > 1 %}
+              <span class="limit-badge warn">почти полон</span>
+            {% else %}
+              <span class="limit-badge ok">ок</span>
+            {% endif %}
+          </span>
+        </div>
+        {% with pct=sites_count|stringformat:"s" %}
+        <div class="limit-bar-wrap" style="width:100%;">
+          <div class="limit-bar {% if sites_at_limit %}full{% elif sites_count >= sites_limit|add:"-1" and sites_limit > 1 %}warn{% else %}ok{% endif %}"
+               style="width:{% widthratio sites_count sites_limit 100 %}%;"></div>
+        </div>
+        {% endwith %}
+      </div>
+
+      <div class="info-row"><span class="info-label">Трафик</span><span class="info-value">До {{ traffic_limit_gb }} ГБ/мес</span></div>
+      <div class="info-row"><span class="info-label">Поддержка</span>
+        <span class="info-value">
+          {% if user.tariff_plan == 'pro' %}Электронная почта
+          {% elif user.tariff_plan == 'free' %}Сообщество
+          {% else %}Стандартная{% endif %}
+        </span>
+      </div>
+
+      {% if sites_at_limit %}
+        <div class="alert alert-warning" style="margin-top:12px;font-size:12px;">
+          Внимание: достигнут лимит сайтов для тарифа «{{ tariff_label }}». Для добавления новых сайтов обратитесь к администратору.
+        </div>
+      {% endif %}
+
       <p style="font-size:12px;color:#64748b;margin-top:12px;">Для изменения тарифного плана обратитесь к администратору.</p>
     </div>
+
+    <div class="card">
+      <div class="card-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+        Аватар профиля
+      </div>
+      <form id="avatarForm">
+        {% csrf_token %}
+        <input class="input-field" type="file" name="avatar" accept="image/*" required>
+        <div style="margin-top: 12px;">
+          <button type="submit" class="btn btn-primary btn-sm">Обновить аватар</button>
+        </div>
+      </form>
+      
+    </div>
+
+    <div class="card">
+      <div class="card-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1v22"/><path d="M5 8h14"/><path d="M5 16h14"/></svg>
+        Смена пароля
+      </div>
+      <form id="passwordForm">
+        {% csrf_token %}
+        <div style="display:flex;flex-direction:column;gap:10px;">
+          <input class="input-field" type="password" name="old_password" placeholder="Текущий пароль" required>
+          <input class="input-field" type="password" name="new_password" placeholder="Новый пароль" required>
+        </div>
+        <div style="margin-top: 12px;">
+          <button type="submit" class="btn btn-primary btn-sm">Сменить пароль</button>
+        </div>
+      </form>
+      
+    </div>
+
     <div class="card" style="grid-column: span 2;">
       <div class="card-title">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
         Мои защищаемые сервисы
       </div>
       
+      {% if sites_at_limit %}
+        <div class="alert alert-warning" style="margin-bottom:16px;">
+          <strong>Лимит сайтов исчерпан</strong> — тариф «{{ tariff_label }}» позволяет добавить не более {{ sites_limit }}
+          {% if sites_limit == 1 %}сайта{% else %}сайтов{% endif %}.
+          Чтобы добавить новый сайт, <a href="#contact-admin" style="color:#fbbf24;text-decoration:underline;">напишите администратору</a> для повышения тарифа.
+        </div>
+        <fieldset disabled style="border:none;padding:0;opacity:0.45;cursor:not-allowed;">
+      {% endif %}
+
       <form method="POST" style="margin-bottom: 24px; display: flex; gap: 10px; align-items: flex-end;">
         {% csrf_token %}
         
@@ -196,6 +286,10 @@
         <button type="submit" class="btn btn-primary" style="height: 40px;">Добавить сайт</button>
       </form>
 
+      {% if sites_at_limit %}
+        </fieldset>
+      {% endif %}
+
       <div style="background: #0f1117; border: 1px solid #2d3250; border-radius: 8px; padding: 16px;">
         <h4 style="font-size: 14px; color: #a5b4fc; margin-bottom: 12px;">Подключенные домены:</h4>
         {% if sites %}
@@ -210,6 +304,11 @@
                   <span class="badge badge-plan" style="background: #7f1d1d; color: #fca5a5;">Только логирование</span>
                 {% endif %}
               </span>
+              <form method="post" action="{% url 'user_delete_site' site.id %}" style="margin: 0;"
+                    onsubmit="return confirm('Удалить домен {{ site.domain }} из защиты WAF?');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-danger">Удалить</button>
+              </form>
             </div>
           {% endfor %}
         {% else %}
@@ -217,9 +316,110 @@
         {% endif %}
       </div>
     </div>
+    <div class="card" style="grid-column: span 2;">
+      <div class="card-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
+        Статистика трафика и логи WAF
+      </div>
+      
+      <div style="display: flex; gap: 24px; flex-wrap: wrap; align-items: stretch;">
+        <div style="flex: 1; min-width: 250px; background: #0f1117; border: 1px solid #2d3250; border-radius: 8px; padding: 16px;">
+          <div class="info-row">
+            <span class="info-label">Всего запросов:</span>
+            <span class="info-value">{{ stats.total_requests|default:"0" }}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Заблокировано:</span>
+            <span class="info-value" style="color: #ef4444;">{{ stats.blocked_requests|default:"0" }}</span>
+          </div>
+        </div>
+
+        <div style="flex: 1; min-width: 250px; background: #0f1117; border: 1px solid #2d3250; border-radius: 8px; padding: 16px; display: flex; flex-direction: column;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                <span style="font-size: 13px; font-weight: 600; color: #a5b4fc;">Готовые выгрузки (CSV)</span>
+                <a href="{% url 'user_download_logs' %}" class="btn btn-sm" style="background: #10b981; color: #fff;">
+                    Сгенерировать логи
+                </a>
+            </div>
+            
+            {% if exports %}
+                <div style="display: flex; flex-direction: column; gap: 8px; max-height: 150px; overflow-y: auto; padding-right: 5px;">
+                {% for f in exports %}
+                    <div style="display: flex; justify-content: space-between; align-items: center; background: #1a1d2e; padding: 8px 12px; border-radius: 6px; border: 1px solid #2d3250;">
+                        <span style="font-size: 12px; color: #e2e8f0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 150px;" title="{{ f.name }}">{{ f.name }}</span>
+                        <div style="display: flex; gap: 6px;">
+                            <a href="{{ f.url }}" target="_blank" class="btn btn-sm" style="background: #3b82f6; color: #fff; padding: 4px 8px;">Скачать</a>
+                            <a href="{% url 'delete_export' f.name %}" class="btn btn-sm" style="background: #ef4444; color: #fff; padding: 4px 8px;" onclick="return confirm('Точно удалить этот файл?')">Удалить</a>
+                        </div>
+                    </div>
+                {% endfor %}
+                </div>
+            {% else %}
+                <p style="font-size: 12px; color: #64748b; margin-top: auto; margin-bottom: auto; text-align: center;">Нет готовых файлов.<br>Нажмите "Сгенерировать", чтобы запустить процесс в фоне.</p>
+            {% endif %}
+        </div>
+      </div>
+    </div>
+
+
+    <!-- Grafana Monitoring card -->
+    <div class="card" style="grid-column: span 2;">
+      <div class="card-title">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        Мониторинг системы
+      </div>
+      <p style="font-size:13px;color:#94a3b8;margin-bottom:14px;">
+        Состояние WAF в реальном времени — CPU, RAM, количество запросов и блокировок. Обновляется каждые 15 секунд.
+      </p>
+
+      <!-- CPU + RAM timeseries -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">
+        <div style="background:#0f1117;border:1px solid #2d3250;border-radius:8px;overflow:hidden;">
+          <div style="font-size:11px;color:#6366f1;font-weight:600;padding:9px 14px;border-bottom:1px solid #2d3250;">CPU Usage (%)</div>
+          <iframe
+            src="http://localhost:3001/d-solo/waf-monitoring/waf-system-monitoring?orgId=1&panelId=1&refresh=15s&theme=dark"
+            width="100%" height="180" frameborder="0" style="display:block;">
+          </iframe>
+        </div>
+        <div style="background:#0f1117;border:1px solid #2d3250;border-radius:8px;overflow:hidden;">
+          <div style="font-size:11px;color:#6366f1;font-weight:600;padding:9px 14px;border-bottom:1px solid #2d3250;">RAM Usage (%)</div>
+          <iframe
+            src="http://localhost:3001/d-solo/waf-monitoring/waf-system-monitoring?orgId=1&panelId=2&refresh=15s&theme=dark"
+            width="100%" height="180" frameborder="0" style="display:block;">
+          </iframe>
+        </div>
+      </div>
+
+      <!-- HTTP RPS -->
+      <div style="background:#0f1117;border:1px solid #2d3250;border-radius:8px;overflow:hidden;margin-bottom:14px;">
+        <div style="font-size:11px;color:#6366f1;font-weight:600;padding:9px 14px;border-bottom:1px solid #2d3250;">HTTP Requests per Second (2xx / 4xx / 429 Rate Limit)</div>
+        <iframe
+          src="http://localhost:3001/d-solo/waf-monitoring/waf-system-monitoring?orgId=1&panelId=3&refresh=15s&theme=dark"
+          width="100%" height="200" frameborder="0" style="display:block;">
+        </iframe>
+      </div>
+
+      <!-- Stat counters -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">
+        <div style="background:#0f1117;border:1px solid #2d3250;border-radius:8px;overflow:hidden;">
+          <div style="font-size:11px;color:#f87171;font-weight:600;padding:9px 14px;border-bottom:1px solid #2d3250;">WAF Заблокировано (403)</div>
+          <iframe
+            src="http://localhost:3001/d-solo/waf-monitoring/waf-system-monitoring?orgId=1&panelId=5&refresh=15s&theme=dark"
+            width="100%" height="90" frameborder="0" style="display:block;">
+          </iframe>
+        </div>
+        <div style="background:#0f1117;border:1px solid #2d3250;border-radius:8px;overflow:hidden;">
+          <div style="font-size:11px;color:#22c55e;font-weight:600;padding:9px 14px;border-bottom:1px solid #2d3250;">Всего запросов (5м)</div>
+          <iframe
+            src="http://localhost:3001/d-solo/waf-monitoring/waf-system-monitoring?orgId=1&panelId=6&refresh=15s&theme=dark"
+            width="100%" height="90" frameborder="0" style="display:block;">
+          </iframe>
+        </div>
+      </div>
+    </div>
 
     <!-- Contact admin card -->
-    <div class="card" style="grid-column: span 2;">
+    <div class="card" style="grid-column: span 2;" id="contact-admin">
       <div class="card-title">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
         Обратиться к администратору
@@ -235,7 +435,71 @@
 </div>
 
 <script>
-  
+  function getCsrfToken() {
+    const csrfInput = document.querySelector('input[name="csrfmiddlewaretoken"]');
+    return csrfInput ? csrfInput.value : '';
+  }
+
+  function showDashboardAlert(message, isError = false) {
+    const main = document.querySelector('.main');
+    if (!main) return;
+    const alert = document.createElement('div');
+    alert.className = `alert ${isError ? 'alert-error' : 'alert-success'}`;
+    alert.textContent = message;
+    main.prepend(alert);
+    setTimeout(() => alert.remove(), 4500);
+  }
+
+  const avatarForm = document.getElementById('avatarForm');
+  if (avatarForm) {
+    avatarForm.addEventListener('submit', async function (e) {
+      e.preventDefault();
+      const formData = new FormData(avatarForm);
+      try {
+        const resp = await fetch('/api/v1/users/me/avatar/', {
+          method: 'PATCH',
+          headers: { 'X-CSRFToken': getCsrfToken() },
+          body: formData,
+          credentials: 'same-origin'
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.detail || 'Не удалось обновить аватар');
+        showDashboardAlert(data.detail || 'Аватар обновлён');
+        window.location.reload();
+      } catch (err) {
+        showDashboardAlert(err.message, true);
+      }
+    });
+  }
+
+  const passwordForm = document.getElementById('passwordForm');
+  if (passwordForm) {
+    passwordForm.addEventListener('submit', async function (e) {
+      e.preventDefault();
+      const payload = {
+        old_password: passwordForm.old_password.value,
+        new_password: passwordForm.new_password.value
+      };
+      try {
+        const resp = await fetch('/api/v1/users/me/password/change/', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCsrfToken()
+          },
+          credentials: 'same-origin',
+          body: JSON.stringify(payload)
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.detail || 'Не удалось сменить пароль');
+        passwordForm.reset();
+        showDashboardAlert(data.detail || 'Пароль обновлён');
+      } catch (err) {
+        showDashboardAlert(err.message, true);
+      }
+    });
+  }
+
   document.addEventListener('keydown', function(event) {
     if (event.key === 'Enter' && document.activeElement && document.activeElement.tagName !== 'TEXTAREA') {
       const logoutForm = document.getElementById('logoutForm');

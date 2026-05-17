@@ -32,6 +32,10 @@
       <a href="{% url 'admin_users' %}" class="btn btn-primary">Управление пользователями</a>
       <a href="{% url 'admin_rules' %}" class="btn btn-secondary">Реестр правил WAF</a>
       <a href="{% url 'admin_monitoring' %}" class="btn btn-secondary">Мониторинг системы</a>
+      <a href="http://localhost:3001/d/waf-monitoring/waf-system-monitoring" target="_blank"
+         style="display:block;padding:9px 16px;border-radius:6px;background:#f46800;color:#fff;text-decoration:none;font-size:13px;font-weight:500;text-align:center;">
+        Grafana Dashboard
+      </a>
       <a href="{% url 'admin_logs' %}" class="btn btn-secondary">Просмотр логов</a>
       <a href="{% url 'admin_sessions' %}" class="btn btn-secondary">Управление сессиями</a>
       <a href="{% url 'admin_tokens' %}" class="btn btn-secondary">Токены доступа</a>
@@ -43,6 +47,41 @@
       <a href="{% url 'admin_change_password' %}" class="btn btn-secondary">Сменить пароль</a>
       <a href="{% url 'admin_avatar' %}" class="btn btn-secondary">Обновить аватар</a>
       <a href="{% url 'setup_2fa' %}" class="btn btn-secondary">Настроить 2FA</a>
+    </div>
+  </div>
+</div>
+
+<!-- Встроенные графики Grafana -->
+<div class="card" style="margin-bottom:20px;">
+  <div class="card-title" style="display:flex;align-items:center;justify-content:space-between;">
+    <span>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:6px;"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      Мониторинг в реальном времени
+    </span>
+    <a href="{% url 'admin_monitoring' %}" style="font-size:12px;color:#6366f1;text-decoration:none;">Полный мониторинг →</a>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+    <div style="background:#0f1117;border:1px solid #2d3250;border-radius:8px;overflow:hidden;">
+      <div style="font-size:11px;color:#6366f1;font-weight:600;padding:8px 12px;border-bottom:1px solid #2d3250;">CPU Usage</div>
+      <iframe src="http://localhost:3001/d-solo/waf-monitoring/waf-system-monitoring?orgId=1&panelId=8&refresh=15s&theme=dark"
+        width="100%" height="100" frameborder="0" style="display:block;"></iframe>
+    </div>
+    <div style="background:#0f1117;border:1px solid #2d3250;border-radius:8px;overflow:hidden;">
+      <div style="font-size:11px;color:#6366f1;font-weight:600;padding:8px 12px;border-bottom:1px solid #2d3250;">RAM Available</div>
+      <iframe src="http://localhost:3001/d-solo/waf-monitoring/waf-system-monitoring?orgId=1&panelId=7&refresh=15s&theme=dark"
+        width="100%" height="100" frameborder="0" style="display:block;"></iframe>
+    </div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+    <div style="background:#0f1117;border:1px solid #2d3250;border-radius:8px;overflow:hidden;">
+      <div style="font-size:11px;color:#f87171;font-weight:600;padding:8px 12px;border-bottom:1px solid #2d3250;">WAF Blocked (403)</div>
+      <iframe src="http://localhost:3001/d-solo/waf-monitoring/waf-system-monitoring?orgId=1&panelId=5&refresh=15s&theme=dark"
+        width="100%" height="100" frameborder="0" style="display:block;"></iframe>
+    </div>
+    <div style="background:#0f1117;border:1px solid #2d3250;border-radius:8px;overflow:hidden;">
+      <div style="font-size:11px;color:#22c55e;font-weight:600;padding:8px 12px;border-bottom:1px solid #2d3250;">Total Requests (5m)</div>
+      <iframe src="http://localhost:3001/d-solo/waf-monitoring/waf-system-monitoring?orgId=1&panelId=6&refresh=15s&theme=dark"
+        width="100%" height="100" frameborder="0" style="display:block;"></iframe>
     </div>
   </div>
 </div>

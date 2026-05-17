@@ -16,9 +16,11 @@ services:
     image: openresty/openresty:alpine-fat
     ports:
       - "80:80"
+      - "8001:8001"
     volumes:
       - ./nginx/nginx.conf:/usr/local/openresty/nginx/conf/nginx.conf
       - static_volume:/app/static
+      - media_volume:/app/media
     depends_on:
       - web
       - engine
@@ -29,10 +31,11 @@ services:
     command: >
       sh -c "python manage.py migrate &&
              python manage.py collectstatic --noinput &&
-             gunicorn waf_project.wsgi:application --bind 0.0.0.0:8000"
+             gunicorn waf_project.wsgi:application --bind 0.0.0.0:8000 --timeout 120"
     volumes:
       - .:/app 
-      - static_volume:/app/static  
+      - static_volume:/app/static
+      - media_volume:/app/media  
     ports:
       - "8000:8000"
     depends_on:
@@ -68,9 +71,102 @@ services:
       - DB_HOST=db
       - DB_PORT=5432
       - PYTHONUNBUFFERED=1
+    networks:
+      - default
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+
+  # ── Monitoring stack ─────────────────────────────────────────────────────
+
+  node_exporter:
+    image: prom/node-exporter:latest
+    container_name: node_exporter
+    restart: unless-stopped
+    command:
+      - '--no-collector.filesystem'
+      - '--no-collector.diskstats'
+      - '--no-collector.netdev'
+    ports:
+      - "9100:9100"
+    networks:
+      - default
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    restart: unless-stopped
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=15d'
+      - '--web.enable-lifecycle'
+    ports:
+      - "9090:9090"
+    depends_on:
+      - node_exporter
+      - engine
+    networks:
+      - default
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    restart: unless-stopped
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=waf_grafana_2024
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_HTTP_PORT=3001
+      - GF_ANALYTICS_REPORTING_ENABLED=false
+      # Анонимный доступ — пользователи видят графики без логина
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_NAME=Main Org.
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+      # Разрешить встраивание через iframe
+      - GF_SECURITY_ALLOW_EMBEDDING=true
+      # Отключить CSP-заголовки, которые блокируют iframe
+      - GF_SECURITY_CONTENT_SECURITY_POLICY=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "3001:3001"
+    depends_on:
+      - prometheus
+    networks:
+      - default
+
+  # ────────────────────────────────────────────────────────────────────────
+
+  celery_worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    command: celery -A waf_project worker --loglevel=info
+    volumes:
+      - .:/app
+      - media_volume:/app/media  
+    environment:
+      - DB_NAME=waf_db
+      - DB_USER=waf_user
+      - DB_PASSWORD=secretpassword
+      - DB_HOST=db
+      - DB_PORT=5432
+    depends_on:
+      - db
+      - redis
 
   
 
 volumes:
   postgres_data:
   static_volume:
+  media_volume:
+  prometheus_data:
+  grafana_data:

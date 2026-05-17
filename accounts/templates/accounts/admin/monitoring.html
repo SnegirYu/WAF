@@ -2,6 +2,7 @@
 {% block title %}Мониторинг{% endblock %}
 {% block page_title %}Мониторинг системы{% endblock %}
 {% block content %}
+
 <div class="stat-grid">
   <div class="stat-card">
     <div class="stat-label">RPS (за минуту)</div>
@@ -28,6 +29,89 @@
 </div>
 
 <div class="card">
+  <div class="card-title">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+    Мониторинг в реальном времени
+  </div>
+  <p style="font-size:13px;color:#94a3b8;margin-bottom:16px;">
+    Графики обновляются каждые 15 секунд автоматически.
+  </p>
+
+  <!-- CPU + RAM -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
+    <div style="background:#0f1117;border:1px solid #2d3250;border-radius:8px;overflow:hidden;">
+      <div style="font-size:11px;color:#6366f1;font-weight:600;padding:10px 14px;border-bottom:1px solid #2d3250;">CPU Usage (%)</div>
+      <iframe
+        src="http://localhost:3001/d-solo/waf-monitoring/waf-system-monitoring?orgId=1&panelId=1&refresh=15s&theme=dark"
+        width="100%" height="220" frameborder="0"
+        style="display:block;">
+      </iframe>
+    </div>
+    <div style="background:#0f1117;border:1px solid #2d3250;border-radius:8px;overflow:hidden;">
+      <div style="font-size:11px;color:#6366f1;font-weight:600;padding:10px 14px;border-bottom:1px solid #2d3250;">RAM Usage (%)</div>
+      <iframe
+        src="http://localhost:3001/d-solo/waf-monitoring/waf-system-monitoring?orgId=1&panelId=2&refresh=15s&theme=dark"
+        width="100%" height="220" frameborder="0"
+        style="display:block;">
+      </iframe>
+    </div>
+  </div>
+
+  <!-- HTTP RPS -->
+  <div style="background:#0f1117;border:1px solid #2d3250;border-radius:8px;overflow:hidden;margin-bottom:16px;">
+    <div style="font-size:11px;color:#6366f1;font-weight:600;padding:10px 14px;border-bottom:1px solid #2d3250;">HTTP Requests per Second (2xx / 4xx / 429)</div>
+    <iframe
+      src="http://localhost:3001/d-solo/waf-monitoring/waf-system-monitoring?orgId=1&panelId=3&refresh=15s&theme=dark"
+      width="100%" height="260" frameborder="0"
+      style="display:block;">
+    </iframe>
+  </div>
+
+  <!-- Rate Limit + WAF Blocked + Stat panels -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
+    <div style="background:#0f1117;border:1px solid #2d3250;border-radius:8px;overflow:hidden;">
+      <div style="font-size:11px;color:#f87171;font-weight:600;padding:10px 14px;border-bottom:1px solid #2d3250;">Rate Limit (429) — за 5 минут</div>
+      <iframe
+        src="http://localhost:3001/d-solo/waf-monitoring/waf-system-monitoring?orgId=1&panelId=4&refresh=15s&theme=dark"
+        width="100%" height="200" frameborder="0"
+        style="display:block;">
+      </iframe>
+    </div>
+    <div style="display:grid;grid-template-rows:1fr 1fr;gap:16px;">
+      <div style="background:#0f1117;border:1px solid #2d3250;border-radius:8px;overflow:hidden;">
+        <div style="font-size:11px;color:#f87171;font-weight:600;padding:10px 14px;border-bottom:1px solid #2d3250;">WAF Blocked (403)</div>
+        <iframe
+          src="http://localhost:3001/d-solo/waf-monitoring/waf-system-monitoring?orgId=1&panelId=5&refresh=15s&theme=dark"
+          width="100%" height="80" frameborder="0"
+          style="display:block;">
+        </iframe>
+      </div>
+      <div style="background:#0f1117;border:1px solid #2d3250;border-radius:8px;overflow:hidden;">
+        <div style="font-size:11px;color:#22c55e;font-weight:600;padding:10px 14px;border-bottom:1px solid #2d3250;">Total Requests (5m)</div>
+        <iframe
+          src="http://localhost:3001/d-solo/waf-monitoring/waf-system-monitoring?orgId=1&panelId=6&refresh=15s&theme=dark"
+          width="100%" height="80" frameborder="0"
+          style="display:block;">
+        </iframe>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;">
+    <a href="http://localhost:3001/d/waf-monitoring/waf-system-monitoring"
+       target="_blank"
+       style="display:inline-flex;align-items:center;gap:8px;background:#f46800;color:#fff;padding:9px 18px;border-radius:6px;text-decoration:none;font-size:13px;font-weight:500;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      Открыть в Grafana
+    </a>
+    <a href="http://localhost:9090" target="_blank"
+       style="display:inline-flex;align-items:center;gap:8px;background:#1a1d2e;border:1px solid #2d3250;color:#94a3b8;padding:9px 18px;border-radius:6px;text-decoration:none;font-size:13px;">
+      Prometheus
+    </a>
+  </div>
+</div>
+
+<div class="card">
   <div class="card-title">Состояние базы данных</div>
   {% if db_ok %}
     <div style="display:flex;align-items:center;gap:10px;">
@@ -47,4 +131,5 @@
   <p style="font-size:13px;color:#94a3b8;margin-bottom:12px;">Страница показывает snapshot на момент загрузки. Обновите страницу для актуальных данных.</p>
   <a href="{% url 'admin_monitoring' %}" class="btn btn-primary"> Обновить</a>
 </div>
+
 {% endblock %}
