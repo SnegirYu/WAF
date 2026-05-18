@@ -80,7 +80,7 @@ jobs:
 
     - name: Build Docker image (ENGINE)
       run: |
-        docker build -f Dockerfile.engine -t registry.gitlab.com/testuserforcicd-group/testuserforcicd-project/waf-web:latest .
+        docker build -f Dockerfile.engine -t registry.gitlab.com/testuserforcicd-group/testuserforcicd-project/waf-engine:latest .
 
     - name: Run Trivy vulnerability scanner (ENGINE)
       uses: aquasecurity/trivy-action@master
