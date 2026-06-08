@@ -13,9 +13,57 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 from pathlib import Path
 import os
 
+
+SITE_URL = "https://403118.vm.spacecore.network:8001"
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = 'Lax'
+X_FRAME_OPTIONS = 'DENY'
+
+CSP_DEFAULT_SRC = ("'self'",)
+
+# Разрешить скрипты (ваш сервер + CDN + inline)
+CSP_SCRIPT_SRC = (
+    "'self'",
+    "'unsafe-inline'",
+    "https://cdn.jsdelivr.net",  # ← добавить для скриптов
+)
+
+# Разрешить стили (ваш сервер + CDN + inline)
+CSP_STYLE_SRC = (
+    "'self'",
+    "'unsafe-inline'",
+    "https://cdn.jsdelivr.net",  # ← добавить для стилей
+)
+
+CSP_STYLE_SRC_ELEM = (
+    "'self'",
+    "'unsafe-inline'",
+    "https://cdn.jsdelivr.net",  # ← добавить для элемента стилей
+)
+
+# Разрешить шрифты (Swagger UI может загружать шрифты с CDN)
+CSP_FONT_SRC = (
+    "'self'",
+    "data:",
+    "https://fonts.gstatic.com",
+    "https://cdn.jsdelivr.net",  # ← добавить для шрифтов
+)
+
+# Разрешить изображения (Swagger может грузить иконки с CDN)
+CSP_IMG_SRC = (
+    "'self'",
+    "data:",
+    "https://avatars.githubusercontent.com",
+    "https://cdn.jsdelivr.net",  # ← добавить для изображений
+)
+
+# Разрешить подключения (WebSocket/XHR)
+CSP_CONNECT_SRC = ("'self'", "https://cdn.jsdelivr.net")
+CORS_ALLOWED_ORIGINS = []
+CORS_REJECT_SIGNAL_RETURNS_403 = True
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
@@ -30,8 +78,11 @@ ALLOWED_HOSTS = [
     'localhost',
     '127.0.0.1',
     'c019-94-156-122-220.ngrok-free.app',
-    '*.ngrok-free.app', 
+    '*.ngrok-free.app',
+    '94.156.122.220:8001',
+    '94.156.122.220',
     'web',
+    '403118.vm.spacecore.network'
 ]
 
 CSRF_TRUSTED_ORIGINS = [
@@ -40,15 +91,18 @@ CSRF_TRUSTED_ORIGINS = [
     'https://localhost:8001',
     'http://localhost:8000',
     'http://127.0.0.1:8000',
+    'https://403118.vm.spacecore.network:8001', 
 ]
 # Application definition
 
 INSTALLED_APPS = [
+    'corsheaders',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
+    'django.contrib.sites',
     'django.contrib.staticfiles',
     'accounts',
     'allauth',
@@ -62,13 +116,11 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',
+    'csp.middleware.CSPMiddleware',
     'django.middleware.security.SecurityMiddleware',
-    'waf_project.middleware.RequestContextMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
-    'waf_project.middleware.ApiSemantic418Middleware',
-    'waf_project.middleware.ApiUriTooLongMiddleware',
-    'waf_project.middleware.RejectCsrfTokenInQueryMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
@@ -76,6 +128,10 @@ MIDDLEWARE = [
     'allauth.account.middleware.AccountMiddleware',
     'django_otp.middleware.OTPMiddleware',
     'waf_project.middleware.ApiRateLimitMiddleware',
+    'waf_project.middleware.ApiSemantic418Middleware',
+    'waf_project.middleware.ApiUriTooLongMiddleware',
+    'waf_project.middleware.RejectCsrfTokenInQueryMiddleware',
+    'waf_project.middleware.RequestContextMiddleware',
 ]
 
 ROOT_URLCONF = 'waf_project.urls'
@@ -322,3 +378,9 @@ SPECTACULAR_SETTINGS = {
         {"name": "HTTP Status", "description": "Справочник поддерживаемых HTTP-кодов и примеры ответов"},
     ],
 }
+SITE_ID = 2 
+# Заставляет django-allauth всегда писать https в ссылках для авторизации
+ACCOUNT_DEFAULT_HTTP_PROTOCOL = 'https'
+
+# Помогает Django понимать, что за Nginx-ом скрывается HTTPS соединение
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')

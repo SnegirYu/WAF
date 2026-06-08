@@ -9,6 +9,8 @@ from datetime import date
 import time
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import unquote, urlparse, parse_qs
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -242,13 +244,13 @@ class WAFProxy(BaseHTTPRequestHandler):
             raw_body = self.rfile.read(content_length) if content_length > 0 else None
         
             # Проксируем сразу, минуя WAF
-            self._proxy_to_backend(method, raw_body, f"http://{target_ip}")
+            self._proxy_to_backend(method, raw_body, f"https://{target_ip}")
             log_request(client_ip, method, self.path, status_code, False, user_agent, domain, rule_name="TRAFFIC_LIMIT_EXCEEDED")
         
             print(f"[STATS] {domain}: +{bytes_in} in, +{bytes_out} out (BYPASSED due to limit)")
             return
         
-        target_url = f"http://{target_ip}"
+        target_url = f"https://{target_ip}"
 
         # Read body for analysis
         content_length = int(self.headers.get('Content-Length', 0))
@@ -372,6 +374,7 @@ class WAFProxy(BaseHTTPRequestHandler):
                 headers=headers,
                 data=raw_body,
                 timeout=10,
+                verify=False,
                 allow_redirects=False
             )
             self.send_response(response.status_code)

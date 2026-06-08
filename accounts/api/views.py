@@ -212,7 +212,7 @@ class RegisterView(APIView):
             user.is_active = False
             user.email_verification_token = str(uuid.uuid4())
             user.save()
-            verify_url = f"http://127.0.0.1:8000/api/v1/auth/verify-email/{user.email_verification_token}/"
+            verify_url = f"{settings.SITE_URL}/api/v1/auth/verify-email/{user.email_verification_token}/"
             send_mail(
                 "Подтверждение регистрации WAF",
                 f"Перейдите по ссылке для подтверждения: {verify_url}",

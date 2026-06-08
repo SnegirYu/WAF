@@ -96,7 +96,7 @@ def register_user(username: str, email: str, password: str):
     user.is_active = False
     user.email_verification_token = str(uuid.uuid4())
     user.save()
-    verify_url = f"http://127.0.0.1:8000/verify/{user.email_verification_token}/"
+    verify_url = f"{settings.SITE_URL}/verify/{user.email_verification_token}/"
     send_mail(
         "Подтверждение регистрации WAF",
         f"Перейдите по ссылке для подтверждения: {verify_url}",
@@ -209,12 +209,22 @@ def unblock_ip_for_token(token, ip: str):
 
 
 def change_user_password(user, new_password: str):
-    if new_password:
-        user.set_password(new_password)
-        user.save()
-        return True
-    return False
-
+    """
+    Меняет пароль пользователя.
+    Для обычных пользователей (не суперпользователей) применяется проверка
+    надёжности пароля. Возвращает True при успехе, False если пароль пустой,
+    или строку с описанием ошибки валидации.
+    """
+    if not new_password:
+        return False
+    if not user.is_superuser:
+        from accounts.forms import validate_password_strength
+        errors = validate_password_strength(new_password)
+        if errors:
+            return "; ".join(errors)
+    user.set_password(new_password)
+    user.save()
+    return True
 
 def deactivate_session_by_key(session_key: str):
     Session.objects.filter(session_key=session_key).delete()

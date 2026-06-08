@@ -18,6 +18,8 @@ from accounts.views import (
     # monitoring & logs
     admin_monitoring, admin_logs,
     user_download_logs, admin_download_logs, delete_export,
+    # banned ips
+    admin_banned_ips, admin_unban_ip,
 )
 
 urlpatterns = [
@@ -58,7 +60,8 @@ urlpatterns = [
     path('panel/logs/download/', admin_download_logs, name='admin_download_logs'),
     path('panel/logs/export/<str:filename>/delete/', delete_export, name='delete_export'),
     path('panel/messages/<int:msg_id>/read/', admin_mark_message_read, name='admin_mark_message_read'),
-
+    path('panel/banned-ips/', admin_banned_ips, name='admin_banned_ips'),
+    path('panel/banned-ips/<int:ban_id>/unban/', admin_unban_ip, name='admin_unban_ip'),
     #  REST API v1
     path('api/v1/', include('accounts.api.urls')),
 

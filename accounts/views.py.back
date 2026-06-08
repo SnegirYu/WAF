@@ -14,7 +14,6 @@ from django.http import HttpResponse
 from django.db.models import Q, Count
 from .services import (
     add_site_for_user,
-    delete_site_for_user,
     block_ip_for_token,
     build_2fa_qr,
     change_user_password,
@@ -41,7 +40,7 @@ from .forms import (
     RegistrationForm, AvatarForm, ChangeRoleForm,
     ProtectedSiteForm, AccessTokenForm, WAFRuleForm
 )
-from .models import AccessToken, ProtectedSite, WAFRule, RequestLog, AdminMessage, BannedIP
+from .models import AccessToken, ProtectedSite, WAFRule, RequestLog, AdminMessage
 User = get_user_model()
 
 def is_superuser(user):
@@ -115,22 +114,6 @@ def dashboard_view(request):
         'traffic_limit_gb': limits['traffic_gb'],
         'tariff_label': limits['label'],
     })
-
-
-@login_required
-def user_delete_site(request, site_id):
-    if request.user.is_superuser:
-        return redirect('admin_panel')
-    if request.method != 'POST':
-        return redirect('dashboard')
-    try:
-        domain = delete_site_for_user(request.user, site_id)
-    except ProtectedSite.DoesNotExist:
-        messages.error(request, 'Сайт не найден или у вас нет прав на его удаление.')
-        return redirect('dashboard')
-    messages.success(request, f'Домен {domain} удалён из защиты WAF.')
-    return redirect('dashboard')
-
 
 #  выход из системы 
 
@@ -296,13 +279,8 @@ def admin_user_detail(request, user_id):
                 messages.success(request, 'Статус блокировки изменён')
         elif action == 'change_password':
             new_pw = request.POST.get('new_password')
-            result = change_user_password(target, new_pw)
-            if result is True:
+            if change_user_password(target, new_pw, skip_validation=True):
                 messages.success(request, 'Пароль изменён')
-            elif isinstance(result, str):
-                messages.error(request, f'Ненадёжный пароль: {result}')
-            else:
-                messages.error(request, 'Введите новый пароль')
         elif action == 'site_protection':
             site_id = request.POST.get('site_id')
             site = get_object_or_404(ProtectedSite, id=site_id, user=target)
@@ -319,16 +297,11 @@ def admin_user_detail(request, user_id):
                 messages.success(request, 'Лимит трафика обновлён')
             except ValueError:
                 messages.error(request, 'Некорректное значение лимита')
-        elif action == 'site_delete':
-            site_id = request.POST.get('site_id')
-            site = get_object_or_404(ProtectedSite, id=site_id, user=target)
-            domain = site.domain
-            site.delete()
-            messages.success(request, f'Домен {domain} удалён из защиты WAF.')
         return redirect('admin_user_detail', user_id=user_id)
     return render(request, 'accounts/admin/user_detail.html', {
         'target': target, 'sites': sites, 'tokens': tokens
     })
+
 
 # 3. Смена пароля (для самого суперпользователя)
 @login_required
@@ -533,29 +506,6 @@ def admin_logs(request):
         'stats': stats,
         'exports': ready_exports
     })
-
-@login_required
-@user_passes_test(is_superuser)
-def admin_banned_ips(request):
-    """Список всех заблокированных IP-адресов по всем сайтам."""
-    banned = BannedIP.objects.select_related('site', 'site__user').filter(is_active=True).order_by('-banned_at')
-    return render(request, 'accounts/admin/banned_ips.html', {'banned': banned})
-
-
-@login_required
-@user_passes_test(is_superuser)
-def admin_unban_ip(request, ban_id):
-    """Разбан IP-адреса."""
-    if request.method == 'POST':
-        ban = get_object_or_404(BannedIP, id=ban_id)
-        ip = ban.ip_address
-        domain = ban.site.domain
-        ban.is_active = False
-        ban.save()
-        messages.success(request, f'IP {ip} разблокирован для сайта {domain}')
-    return redirect('admin_banned_ips')
-
-
 
 @login_required
 def start_log_export(request):
