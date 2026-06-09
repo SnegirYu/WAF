@@ -94,7 +94,7 @@
 1. Клонировать репозиторий и перейти в корень проекта.
 2. Запуск контейнеров: `docker-compose up -d`.
 3. Создание администратора: `docker-compose exec -it <имяконтейнера>-web-1 python manage.py createsuperuser`.
-4. Настройка OAuth: зайти в `localhost/admin/` → Social Applications → добавить приложение GitHub, указав Client ID и Secret Key.
+4. Настройка OAuth: зайти в `localhost/admin/` -> Social Applications -> добавить приложение GitHub, указав Client ID и Secret Key.
 
 ### Руководство по настройке и запуску дистрибутива ПО
 
