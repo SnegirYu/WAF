@@ -2,8 +2,9 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
+from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView, SpectacularRedocView
 from accounts.views import (
-    register_view, verify_email, dashboard_view,
+    register_view, verify_email, dashboard_view, user_delete_site,
     setup_2fa, verify_2fa_setup, verify_otp_login,
     logout_view,
     # admin panel
@@ -16,8 +17,9 @@ from accounts.views import (
     admin_rules, admin_rule_edit, admin_rule_delete, admin_rule_toggle,
     # monitoring & logs
     admin_monitoring, admin_logs,
-    # API для OpenResty
-    waf_status,
+    user_download_logs, admin_download_logs, delete_export,
+    # banned ips
+    admin_banned_ips, admin_unban_ip,
 )
 
 urlpatterns = [
@@ -29,13 +31,15 @@ urlpatterns = [
     ), name='login'),
     path('logout/', logout_view, name='logout'),
     path('dashboard/', dashboard_view, name='dashboard'),
+    path('dashboard/sites/<int:site_id>/delete/', user_delete_site, name='user_delete_site'),
     path('dashboard/contact/', contact_admin, name='contact_admin'),
+    path('dashboard/logs/download/', user_download_logs, name='user_download_logs'),
     path('accounts/', include('allauth.urls')),
     path('2fa/setup/', setup_2fa, name='setup_2fa'),
     path('2fa/verify/', verify_2fa_setup, name='verify_2fa_setup'),
     path('verify-2fa/', verify_otp_login, name='verify_otp_login'),
 
-    # Панель администратора
+    # Admin panel
     path('panel/', admin_panel, name='admin_panel'),
     path('panel/tokens/', admin_tokens, name='admin_tokens'),
     path('panel/tokens/<int:token_id>/toggle/', admin_token_toggle, name='admin_token_toggle'),
@@ -53,6 +57,20 @@ urlpatterns = [
     path('panel/rules/<int:rule_id>/toggle/', admin_rule_toggle, name='admin_rule_toggle'),
     path('panel/monitoring/', admin_monitoring, name='admin_monitoring'),
     path('panel/logs/', admin_logs, name='admin_logs'),
+    path('panel/logs/download/', admin_download_logs, name='admin_download_logs'),
+    path('panel/logs/export/<str:filename>/delete/', delete_export, name='delete_export'),
     path('panel/messages/<int:msg_id>/read/', admin_mark_message_read, name='admin_mark_message_read'),
-    path('api/waf-status/', waf_status, name='waf_status'),
+    path('panel/banned-ips/', admin_banned_ips, name='admin_banned_ips'),
+    path('panel/banned-ips/<int:ban_id>/unban/', admin_unban_ip, name='admin_unban_ip'),
+    #  REST API v1
+    path('api/v1/', include('accounts.api.urls')),
+
+    #  OpenAPI Schema & Swagger UI
+    path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
+    path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
+    path('api/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
+# API: Problem Details для ошибок размера URI и тела запроса
+handler413 = "accounts.api.handlers.error_413"
+handler414 = "accounts.api.handlers.error_414"

@@ -1,0 +1,21 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # System metrics via Node Exporter
+  - job_name: 'node_exporter'
+    static_configs:
+      - targets: ['node_exporter:9100']
+    metrics_path: /metrics
+
+  # WAF Engine custom metrics (HTTP request stats)
+  - job_name: 'waf_engine'
+    static_configs:
+      - targets: ['engine:8080']
+    metrics_path: /metrics
+
+  # Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']

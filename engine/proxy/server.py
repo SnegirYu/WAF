@@ -9,11 +9,33 @@ from datetime import date
 import time
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import unquote, urlparse, parse_qs
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from analyzer.inspector import analyze_request
 from analyzer.request_types import ParsedRequest
+
+from prometheus_client import Counter, Gauge, generate_latest, CONTENT_TYPE_LATEST, REGISTRY
+
+# ── Prometheus metrics ──────────────────────────────────────────────────────
+waf_requests_counter = Counter(
+    'waf_http_requests_total',
+    'Total HTTP requests handled by WAF',
+    ['status_code', 'domain']
+)
+waf_rate_limit_counter = Counter(
+    'waf_rate_limit_total',
+    'Total Rate Limit (429) responses sent by WAF',
+    ['domain']
+)
+waf_blocked_counter = Counter(
+    'waf_blocked_requests_total',
+    'Total requests blocked by WAF rules',
+    ['domain', 'rule']
+)
+# ───────────────────────────────────────────────────────────────────────────
 
 traffic_cache = defaultdict(lambda: {'bytes_in': 0, 'bytes_out': 0, 'requests': 0})
 cache_lock = threading.Lock()
@@ -44,7 +66,7 @@ def get_site_info_from_db(domain):
             return result[0], result[1], result[2]
         return None, False, 0
     except Exception as e:
-        print(f"Ошибка подключения к БД: {e}")
+        print(f"Database error: {e}")
         return None, False, 0
 
 def update_traffic_stats_db(domain, bytes_in, bytes_out):
@@ -124,7 +146,7 @@ def log_request(ip_address, method, path, status_code, was_blocked, user_agent, 
         cur.close()
         conn.close()
     except Exception as e:
-        print(f"Ошибка записи лога: {e}")
+        print(f"Log error: {e}")
 
 def flush_traffic_cache():
     global last_flush_time, traffic_cache
@@ -141,10 +163,42 @@ def flush_traffic_cache():
 flush_thread = threading.Thread(target=flush_traffic_cache, daemon=True)
 flush_thread.start()
 
+def get_client_ip(self):
+    """Получает реальный IP клиента, учитывая прокси"""
+    # Проверяем X-Forwarded-For (может содержать несколько IP)
+    x_forwarded_for = self.headers.get('X-Forwarded-For')
+    if x_forwarded_for:
+        # Берем первый IP в списке (реальный клиент)
+        client_ip = x_forwarded_for.split(',')[0].strip()
+        print(f"[IP] X-Forwarded-For: {x_forwarded_for} -> {client_ip}")
+        return client_ip
+    
+    # Проверяем X-Real-IP
+    x_real_ip = self.headers.get('X-Real-IP')
+    if x_real_ip:
+        print(f"[IP] X-Real-IP: {x_real_ip}")
+        return x_real_ip
+    
+    # Fallback на IP соединения (будет IP nginx)
+    print(f"[IP] Direct connection IP: {self.client_address[0]}")
+    return self.client_address[0]
+
 class WAFProxy(BaseHTTPRequestHandler):
     
     def do_GET(self):
+        if self.path == '/metrics':
+            self._serve_metrics()
+            return
         self._handle_any_request('GET')
+
+    def _serve_metrics(self):
+        """Prometheus /metrics endpoint"""
+        output = generate_latest(REGISTRY)
+        self.send_response(200)
+        self.send_header('Content-Type', CONTENT_TYPE_LATEST)
+        self.send_header('Content-Length', str(len(output)))
+        self.end_headers()
+        self.wfile.write(output)
     def do_POST(self):
         self._handle_any_request('POST')
     def do_PUT(self):
@@ -161,36 +215,117 @@ class WAFProxy(BaseHTTPRequestHandler):
     def _handle_any_request(self, method):
         host_header = self.headers.get('Host', '')
         domain = host_header.split(':')[0] 
-        client_ip = self.client_address[0]
+        client_ip = self.get_client_ip()
         user_agent = self.headers.get('User-Agent', '')
         
         if not domain:
             self.send_error(400, "Missing Host header")
             return
-            
+        if is_ip_banned(domain, client_ip):
+            self.send_response(403)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({
+                "error": "Your IP has been temporarily banned",
+                "reason": "Too many suspicious requests",
+                "unblock_after": "1 hour"
+            }).encode())
+            return   
         target_ip, is_protected, traffic_limit_mb = get_site_info_from_db(domain)
         
         if not target_ip:
             self.send_error(404, f"Domain '{domain}' is not registered")
             return
             
+        # Check traffic limit
         if not check_traffic_limit(domain, traffic_limit_mb):
-            print(f"ЛИМИТ ПРЕВЫШЕН [{domain}]")
-            self.send_response(429)
-            self.send_header('Content-Type', 'application/json')
-            self.end_headers()
-            self.wfile.write(json.dumps({"error": "Traffic limit exceeded"}).encode())
+            print(f"LIMIT EXCEEDED [{domain}]")
+            content_length = int(self.headers.get('Content-Length', 0))
+            raw_body = self.rfile.read(content_length) if content_length > 0 else None
+        
+            # Проксируем сразу, минуя WAF
+            self._proxy_to_backend(method, raw_body, f"https://{target_ip}")
+            log_request(client_ip, method, self.path, status_code, False, user_agent, domain, rule_name="TRAFFIC_LIMIT_EXCEEDED")
+        
+            print(f"[STATS] {domain}: +{bytes_in} in, +{bytes_out} out (BYPASSED due to limit)")
             return
         
-        # Читаем тело запроса
+        target_url = f"https://{target_ip}"
+
+        # Read body for analysis
         content_length = int(self.headers.get('Content-Length', 0))
         raw_body = self.rfile.read(content_length) if content_length > 0 else None
         bytes_in = content_length
         
-        # Проксируем запрос (получаем статус и тело ответа)
-        status_code, response_content = self._proxy_to_backend(method, raw_body, f"http://{target_ip}")
+        # Parse body for analyzer
+        body_parsed = None
+        if raw_body:
+            try:
+                body_parsed = json.loads(raw_body.decode('utf-8'))
+            except:
+                body_parsed = raw_body.decode('utf-8') if raw_body else None
         
-        # Обновляем статистику трафика
+        # Parse request for analyzer
+        parsed_url = urlparse(self.path)
+        request_to_analyze = ParsedRequest(
+            method=method,
+            path=parsed_url.path,
+            query_params={k: v[0] for k, v in parse_qs(parsed_url.query).items()},
+            headers=dict(self.headers),
+            body=body_parsed
+        )
+
+        # Analyze request for attacks
+        result = analyze_request(request_to_analyze)
+        
+        # Check if should block
+        was_blocked = False
+        triggered_rule = None
+        
+        if not result.is_safe:
+            print(f"ATTACK DETECTED [{domain}]: {result.reason} ({result.details}) from {client_ip}")
+            was_blocked = True
+            triggered_rule = result.reason
+            log_attack_attempt(domain, client_ip, result.reason)
+            check_and_ban_if_needed(domain, client_ip)
+            if is_protected:
+
+                print(f"BLOCKED [{domain}]: {method} {self.path} - {result.reason}")
+                
+                # Log blocked request
+                log_request(client_ip, method, self.path, 403, was_blocked, user_agent, domain, triggered_rule)
+
+                # ── Prometheus counters ──
+                waf_requests_counter.labels(status_code='403', domain=domain).inc()
+                waf_blocked_counter.labels(domain=domain, rule=str(triggered_rule or 'unknown')).inc()
+                # ─────────────────────────
+
+                # Update traffic stats (only incoming bytes, no outgoing)
+                with cache_lock:
+                    stats = traffic_cache[domain]
+                    stats['bytes_in'] += bytes_in
+                    stats['requests'] += 1
+                
+                print(f"[STATS] {domain}: +{bytes_in} in, +0 out (BLOCKED)")
+                
+                # Send 403 response
+                self.send_response(403)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({
+                    "error": "Request blocked by WAF",
+                    "reason": result.reason,
+                    "details": result.details
+                }).encode())
+                return
+            else:
+                # Protection disabled - just log, don't block (monitoring mode)
+                print(f"MONITOR ONLY [{domain}]: Would block but protection disabled")
+        
+        # Proxy the request (safe OR attack with protection disabled)
+        status_code, response_content = self._proxy_to_backend(method, raw_body, target_url)
+        
+        # Update traffic statistics
         bytes_out = len(response_content) if response_content else 0
         with cache_lock:
             stats = traffic_cache[domain]
@@ -198,10 +333,32 @@ class WAFProxy(BaseHTTPRequestHandler):
             stats['bytes_out'] += bytes_out
             stats['requests'] += 1
         
-        # Логируем запрос
-        log_request(client_ip, method, self.path, status_code, False, user_agent, domain)
-        
+        # Log the request
+        log_request(client_ip, method, self.path, status_code, was_blocked, user_agent, domain, triggered_rule)
+
+        # ── Prometheus counters ──
+        waf_requests_counter.labels(status_code=str(status_code), domain=domain).inc()
+        if status_code == 429:
+            waf_rate_limit_counter.labels(domain=domain).inc()
+        # ─────────────────────────
+
         print(f"[STATS] {domain}: +{bytes_in} in, +{bytes_out} out")
+
+
+    def get_client_ip(self):
+        x_forwarded_for = self.headers.get('X-Forwarded-For')
+        if x_forwarded_for:
+            client_ip = x_forwarded_for.split(',')[0].strip()
+            print(f"[IP] X-Forwarded-For: {x_forwarded_for} -> {client_ip}")
+            return client_ip
+        
+        x_real_ip = self.headers.get('X-Real-IP')
+        if x_real_ip:
+            print(f"[IP] X-Real-IP: {x_real_ip}")
+            return x_real_ip
+        
+        print(f"[IP] Direct connection IP: {self.client_address[0]}")
+        return self.client_address[0]
 
     def _proxy_to_backend(self, method, raw_body, target_url):
         if '/socket.io/' in self.path:
@@ -209,14 +366,16 @@ class WAFProxy(BaseHTTPRequestHandler):
             self.end_headers()
             return 200, b''
         
-        headers = {k: v for k, v in self.headers.items() if k.lower() not in ['content-length']}
+        headers = {k: v for k, v in self.headers.items() if k.lower() not in ['content-length', 'host']}
         try:
             response = requests.request(
                 method=method,
                 url=target_url + self.path,
                 headers=headers,
                 data=raw_body,
-                timeout=10
+                timeout=10,
+                verify=False,
+                allow_redirects=False
             )
             self.send_response(response.status_code)
             excluded_headers = ['content-length', 'transfer-encoding', 'connection', 'date', 'server']
@@ -232,7 +391,117 @@ class WAFProxy(BaseHTTPRequestHandler):
             self.send_error(502, f"Proxy error: {str(e)}")
             return 502, b''
 
+def log_attack_attempt(domain, ip_address, rule_name):
+    """Логирует попытку атаки в таблицу AttackAttempt"""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        # Получаем site_id
+        cur.execute("SELECT id FROM accounts_protectedsite WHERE domain = %s", (domain,))
+        site_row = cur.fetchone()
+        if not site_row:
+            return
+        site_id = site_row[0]
+        
+        # Получаем rule_id (если есть)
+        rule_id = None
+        if rule_name:
+            cur.execute("SELECT id FROM accounts_wafrule WHERE name = %s", (rule_name,))
+            rule_row = cur.fetchone()
+            rule_id = rule_row[0] if rule_row else None
+        
+        # Вставляем запись об атаке
+        cur.execute("""
+            INSERT INTO accounts_attackattempt (site_id, ip_address, rule_triggered_id, timestamp)
+            VALUES (%s, %s, %s, NOW())
+        """, (site_id, ip_address, rule_id))
+        conn.commit()
+        
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print(f"Error logging attack attempt: {e}")
+
+def check_and_ban_if_needed(domain, ip_address):
+    """Проверяет, нужно ли забанить IP, и банит если надо"""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        # Получаем site_id
+        cur.execute("SELECT id FROM accounts_protectedsite WHERE domain = %s", (domain,))
+        site_row = cur.fetchone()
+        if not site_row:
+            print(f"[BAN] Site not found for domain: {domain}")
+            return
+        site_id = site_row[0]
+        
+        # Считаем атаки за последние 10 минут
+        cur.execute("""
+            SELECT COUNT(*) FROM accounts_attackattempt
+            WHERE site_id = %s AND ip_address = %s
+            AND timestamp > NOW() - INTERVAL '10 minutes'
+        """, (site_id, ip_address))
+        attack_count = cur.fetchone()[0]
+        
+        print(f"[BAN] IP {ip_address} has {attack_count} attacks in last 10 minutes")
+        
+        # Если 3 или более атаки - баним
+        if attack_count >= 3:
+            print(f"[BAN] Threshold reached, attempting to ban...")
+            
+            # Проверяем, не забанен ли уже
+            cur.execute("""
+                SELECT id FROM accounts_bannedip
+                WHERE site_id = %s AND ip_address = %s AND is_active = True
+                AND expires_at > NOW()
+            """, (site_id, ip_address))
+            already_banned = cur.fetchone()
+            
+            if not already_banned:
+                # Баним на 1 час - теперь с banned_at
+                cur.execute("""
+                    INSERT INTO accounts_bannedip 
+                    (site_id, ip_address, reason, banned_at, expires_at, attack_count, time_window_minutes, is_active)
+                    VALUES (%s, %s, %s, NOW(), NOW() + INTERVAL '1 hour', %s, %s, True)
+                """, (site_id, ip_address, f"Auto-banned after {attack_count} attacks in 10 minutes", attack_count, 10))
+                conn.commit()
+                print(f"[BAN] ✅ AUTO-BANNED {ip_address} for {domain} - {attack_count} attacks in 10 minutes")
+            else:
+                print(f"[BAN] IP {ip_address} is already banned")
+        
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print(f"[BAN] Error: {e}")
+        import traceback
+        traceback.print_exc()
+
+def is_ip_banned(domain, ip_address):
+    """Проверяет, забанен ли IP для данного домена"""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT expires_at FROM accounts_bannedip b
+            JOIN accounts_protectedsite s ON s.id = b.site_id
+            WHERE s.domain = %s AND b.ip_address = %s 
+            AND b.is_active = True AND b.expires_at > NOW()
+        """, (domain, ip_address))
+        result = cur.fetchone()
+        cur.close()
+        conn.close()
+        
+        if result:
+            expires_at = result[0]
+            print(f"BLOCKED: IP {ip_address} is banned until {expires_at}")
+            return True
+        return False
+    except Exception as e:
+        print(f"Error checking ban: {e}")
+        return False
 if __name__ == '__main__':
     server = ThreadingHTTPServer(('0.0.0.0', 8080), WAFProxy)
-    print("WAF с QoS запущен!")
+    print("WAF with traffic stats, monitoring and blocking modes running on port 8080")
     server.serve_forever()

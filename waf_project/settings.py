@@ -13,9 +13,57 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 from pathlib import Path
 import os
 
+
+SITE_URL = "https://403118.vm.spacecore.network:8001"
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = 'Lax'
+X_FRAME_OPTIONS = 'DENY'
+
+CSP_DEFAULT_SRC = ("'self'",)
+
+# Разрешить скрипты (ваш сервер + CDN + inline)
+CSP_SCRIPT_SRC = (
+    "'self'",
+    "'unsafe-inline'",
+    "https://cdn.jsdelivr.net",  # ← добавить для скриптов
+)
+
+# Разрешить стили (ваш сервер + CDN + inline)
+CSP_STYLE_SRC = (
+    "'self'",
+    "'unsafe-inline'",
+    "https://cdn.jsdelivr.net",  # ← добавить для стилей
+)
+
+CSP_STYLE_SRC_ELEM = (
+    "'self'",
+    "'unsafe-inline'",
+    "https://cdn.jsdelivr.net",  # ← добавить для элемента стилей
+)
+
+# Разрешить шрифты (Swagger UI может загружать шрифты с CDN)
+CSP_FONT_SRC = (
+    "'self'",
+    "data:",
+    "https://fonts.gstatic.com",
+    "https://cdn.jsdelivr.net",  # ← добавить для шрифтов
+)
+
+# Разрешить изображения (Swagger может грузить иконки с CDN)
+CSP_IMG_SRC = (
+    "'self'",
+    "data:",
+    "https://avatars.githubusercontent.com",
+    "https://cdn.jsdelivr.net",  # ← добавить для изображений
+)
+
+# Разрешить подключения (WebSocket/XHR)
+CSP_CONNECT_SRC = ("'self'", "https://cdn.jsdelivr.net")
+CORS_ALLOWED_ORIGINS = []
+CORS_REJECT_SIGNAL_RETURNS_403 = True
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
@@ -30,19 +78,31 @@ ALLOWED_HOSTS = [
     'localhost',
     '127.0.0.1',
     'c019-94-156-122-220.ngrok-free.app',
-    '*.ngrok-free.app',  
+    '*.ngrok-free.app',
+    '94.156.122.220:8001',
+    '94.156.122.220',
     'web',
+    '403118.vm.spacecore.network'
 ]
 
-
+CSRF_TRUSTED_ORIGINS = [
+    'http://localhost:8001',
+    'http://127.0.0.1:8001',
+    'https://localhost:8001',
+    'http://localhost:8000',
+    'http://127.0.0.1:8000',
+    'https://403118.vm.spacecore.network:8001', 
+]
 # Application definition
 
 INSTALLED_APPS = [
+    'corsheaders',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
+    'django.contrib.sites',
     'django.contrib.staticfiles',
     'accounts',
     'allauth',
@@ -51,9 +111,13 @@ INSTALLED_APPS = [
     'allauth.socialaccount.providers.github',
     'django_otp',
     'django_otp.plugins.otp_totp',
+    'rest_framework',
+    'drf_spectacular',
 ]
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',
+    'csp.middleware.CSPMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -63,6 +127,11 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'allauth.account.middleware.AccountMiddleware',
     'django_otp.middleware.OTPMiddleware',
+    'waf_project.middleware.ApiRateLimitMiddleware',
+    'waf_project.middleware.ApiSemantic418Middleware',
+    'waf_project.middleware.ApiUriTooLongMiddleware',
+    'waf_project.middleware.RejectCsrfTokenInQueryMiddleware',
+    'waf_project.middleware.RequestContextMiddleware',
 ]
 
 ROOT_URLCONF = 'waf_project.urls'
@@ -145,11 +214,12 @@ LOGOUT_REDIRECT_URL = 'login'
 
 # Настройки почты
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = 'smtp.mail.ru' 
-EMAIL_PORT = 465
-EMAIL_USE_SSL = True
-EMAIL_HOST_USER = 'gijxsc@mail.ru' 
-EMAIL_HOST_PASSWORD = 'lOWhmOdlgQe93OffsFA7'
+EMAIL_HOST = 'smtp.gmail.com' 
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True      # TLS на 587
+EMAIL_USE_SSL = False 
+EMAIL_HOST_USER = 'jacobs.monarchist@gmail.com' 
+EMAIL_HOST_PASSWORD = 'uzle zogk ocdu forv'
 DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
 
 # для oauth
@@ -179,4 +249,138 @@ SOCIALACCOUNT_EMAIL_VERIFICATION = "none"
 SOCIALACCOUNT_EMAIL_AUTHENTICATION = True
 SOCIALACCOUNT_EMAIL_AUTHENTICATION_AUTO_CONNECT = True
 
+#redis
 
+CELERY_BROKER_URL = 'redis://redis:6379/0'
+CELERY_RESULT_BACKEND = 'redis://redis:6379/0'
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+
+# Rate limiting (API)
+API_RATE_LIMIT = 10
+API_RATE_LIMIT_WINDOW = 60
+API_MAX_URI_LENGTH = 2048
+
+# Лимит тела запроса (превышение → HTTP 413)
+DATA_UPLOAD_MAX_MEMORY_SIZE = 2_621_440  # 2.5 MB
+
+# Cache (rate limiting; falls back to in-process store if Redis is unavailable)
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+        'LOCATION': os.environ.get('REDIS_URL', 'redis://redis:6379/1'),
+        'OPTIONS': {
+            'socket_connect_timeout': 2,
+        },
+    }
+}
+
+# HTTP request logging (UUIDv7 request ID in every log line)
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '[{asctime}] {levelname} request_id={request_id} {message}',
+            'style': '{',
+        },
+    },
+    'filters': {
+        'request_id': {
+            '()': 'waf_project.logging_filters.RequestIdFilter',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'verbose',
+            'filters': ['request_id'],
+        },
+    },
+    'loggers': {
+        'waf.http': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+    },
+}
+
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
+
+
+
+
+# ─── Django REST Framework ───────────────────────────────────────────────────
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": [],
+    "DEFAULT_PERMISSION_CLASSES": [],
+    "DEFAULT_PARSER_CLASSES": [
+        "rest_framework.parsers.JSONParser",
+    ],
+    "DEFAULT_RENDERER_CLASSES": [
+        "rest_framework.renderers.JSONRenderer",
+    ],
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    "EXCEPTION_HANDLER": "accounts.api.exception_handler.custom_exception_handler",
+}
+
+# ─── drf-spectacular (OpenAPI / Swagger) ────────────────────────────────────
+SPECTACULAR_SETTINGS = {
+    "TITLE": "WAF API",
+    "DESCRIPTION": (
+        "REST API для управления Web Application Firewall. "
+        "Аутентификация через Bearer-токен.\n\n"
+        "Как тестировать в Swagger:\n"
+        "1) Получите токен через POST /api/v1/auth/token/ (username, password, otp_token при включенном 2FA).\n"
+        "2) Нажмите Authorize и вставьте: Bearer <token>.\n"
+        
+    ),
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
+    "SCHEMA_PATH_PREFIX": "/api/v1",
+    "COMPONENT_SPLIT_REQUEST": True,
+    "SORT_OPERATIONS": False,
+    "SWAGGER_UI_SETTINGS": {
+        "persistAuthorization": True,
+    },
+    "APPEND_COMPONENTS": {
+        "securitySchemes": {
+            "BearerAuth": {
+                "type": "http",
+                "scheme": "bearer",
+                "bearerFormat": "Token",
+                "description": "Вставьте токен в формате: Bearer <token>",
+            },
+            "ApiKeyAuth": {
+                "type": "apiKey",
+                "in": "header",
+                "name": "X-API-Key",
+                "description": "Альтернатива Bearer: передайте токен в заголовке X-API-Key",
+            },
+        }
+    },
+    "SECURITY": [{"BearerAuth": []}, {"ApiKeyAuth": []}],
+    "TAGS": [
+        {"name": "Auth", "description": "Регистрация, login/logout, 2FA и получение Bearer-токена"},
+        {"name": "WAF Engine", "description": "Эндпоинты для nginx/движка WAF (без аутентификации)"},
+        {"name": "Sites", "description": "Управление защищёнными сайтами"},
+        {"name": "Rules", "description": "Управление правилами WAF (только администратор)"},
+        {"name": "Logs", "description": "Журнал запросов и экспорт CSV"},
+        {"name": "Tokens", "description": "Управление токенами доступа"},
+        {"name": "Users", "description": "Управление пользователями (только администратор)"},
+        {"name": "Monitoring", "description": "Системные метрики (только администратор)"},
+        {"name": "Security", "description": "Забаненные IP и атаки"},
+        {"name": "Admin", "description": "Сообщения и сессии (только администратор)"},
+        {"name": "Stats", "description": "Агрегированная статистика"},
+        {"name": "HTTP Status", "description": "Справочник поддерживаемых HTTP-кодов и примеры ответов"},
+    ],
+}
+SITE_ID = 2 
+# Заставляет django-allauth всегда писать https в ссылках для авторизации
+ACCOUNT_DEFAULT_HTTP_PROTOCOL = 'https'
+
+# Помогает Django понимать, что за Nginx-ом скрывается HTTPS соединение
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')

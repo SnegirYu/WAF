@@ -1,0 +1,282 @@
+{
+  "uid": "waf-monitoring-working",
+  "title": "WAF System Monitoring",
+  "description": "Мониторинг WAF — ресурсы сервера и HTTP метрики",
+  "tags": ["waf", "monitoring", "production"],
+  "timezone": "browser",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "15s",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "CPU Usage (%)",
+      "type": "timeseries",
+      "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8},
+      "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "color": {"mode": "palette-classic"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 60},
+              {"color": "red", "value": 80}
+            ]
+          }
+        }
+      },
+      "options": {
+        "tooltip": {"mode": "multi"},
+        "legend": {"displayMode": "list", "placement": "bottom"}
+      },
+      "targets": [
+        {
+          "expr": "100 - (avg(rate(node_cpu_seconds_total{mode=\"idle\"}[1m])) * 100)",
+          "legendFormat": "CPU Usage",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "RAM Usage (%)",
+      "type": "timeseries",
+      "gridPos": {"x": 12, "y": 0, "w": 12, "h": 8},
+      "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "color": {"mode": "palette-classic"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 70},
+              {"color": "red", "value": 85}
+            ]
+          }
+        }
+      },
+      "options": {
+        "tooltip": {"mode": "multi"},
+        "legend": {"displayMode": "list", "placement": "bottom"}
+      },
+      "targets": [
+        {
+          "expr": "100 * (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes))",
+          "legendFormat": "RAM Usage",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "RAM Available (GB)",
+      "type": "timeseries",
+      "gridPos": {"x": 0, "y": 8, "w": 8, "h": 6},
+      "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "conversionFactor": 1e-9,
+          "color": {"mode": "palette-classic"}
+        }
+      },
+      "options": {
+        "tooltip": {"mode": "multi"},
+        "legend": {"displayMode": "list", "placement": "bottom"}
+      },
+      "targets": [
+        {
+          "expr": "node_memory_MemAvailable_bytes",
+          "legendFormat": "Available RAM",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "HTTP Requests (by status code)",
+      "type": "timeseries",
+      "gridPos": {"x": 8, "y": 8, "w": 16, "h": 9},
+      "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {"mode": "palette-classic"}
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "200 OK"},
+            "properties": [{"id": "color", "value": {"fixedColor": "#73BF69", "mode": "fixed"}}]
+          },
+          {
+            "matcher": {"id": "byName", "options": "304 Not Modified"},
+            "properties": [{"id": "color", "value": {"fixedColor": "#1F60C4", "mode": "fixed"}}]
+          },
+          {
+            "matcher": {"id": "byName", "options": "403 Blocked"},
+            "properties": [{"id": "color", "value": {"fixedColor": "#F2495C", "mode": "fixed"}}]
+          }
+        ]
+      },
+      "options": {
+        "tooltip": {"mode": "multi"},
+        "legend": {"displayMode": "table", "placement": "bottom"}
+      },
+      "targets": [
+        {
+          "expr": "sum(waf_http_requests_total{status_code=\"200\"}) or vector(0)",
+          "legendFormat": "200 OK",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(waf_http_requests_total{status_code=\"304\"}) or vector(0)",
+          "legendFormat": "304 Not Modified",
+          "refId": "B"
+        },
+        {
+          "expr": "sum(waf_http_requests_total{status_code=\"403\"}) or vector(0)",
+          "legendFormat": "403 Blocked",
+          "refId": "C"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "HTTP Requests Rate (per second)",
+      "type": "timeseries",
+      "gridPos": {"x": 0, "y": 17, "w": 12, "h": 8},
+      "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "color": {"mode": "palette-classic"}
+        }
+      },
+      "options": {
+        "tooltip": {"mode": "multi"},
+        "legend": {"displayMode": "list", "placement": "bottom"}
+      },
+      "targets": [
+        {
+          "expr": "rate(waf_http_requests_total{status_code=\"200\"}[1m])",
+          "legendFormat": "200 OK",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(waf_http_requests_total{status_code=\"304\"}[1m])",
+          "legendFormat": "304 Not Modified",
+          "refId": "B"
+        },
+        {
+          "expr": "rate(waf_http_requests_total{status_code=\"403\"}[1m])",
+          "legendFormat": "403 Blocked",
+          "refId": "C"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Blocked Requests (403) - Last 5 min",
+      "type": "stat",
+      "gridPos": {"x": 12, "y": 17, "w": 4, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "red", "value": 1}
+            ]
+          }
+        }
+      },
+      "options": {
+        "reduceOptions": {"calcs": ["lastNotNull"]},
+        "orientation": "auto",
+        "graphMode": "area"
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(waf_http_requests_total{status_code=\"403\"}[5m]))",
+          "legendFormat": "Blocked",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Total Requests (5 min)",
+      "type": "stat",
+      "gridPos": {"x": 16, "y": 17, "w": 4, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {"fixedColor": "#73BF69", "mode": "fixed"}
+        }
+      },
+      "options": {
+        "reduceOptions": {"calcs": ["lastNotNull"]},
+        "orientation": "auto",
+        "graphMode": "area"
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(waf_http_requests_total[5m]))",
+          "legendFormat": "Total",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "WAF Status",
+      "type": "stat",
+      "gridPos": {"x": 20, "y": 17, "w": 4, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "value"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null}
+            ]
+          }
+        }
+      },
+      "options": {
+        "reduceOptions": {"calcs": ["lastNotNull"]},
+        "orientation": "auto",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "expr": "up{job=\"waf_engine\"}",
+          "legendFormat": "WAF",
+          "refId": "A"
+        }
+      ]
+    }
+  ],
+  "timepicker": {
+    "refresh_intervals": ["5s", "10s", "30s", "1m", "5m", "15m", "30m", "1h", "2h", "1d"],
+    "time_options": ["5m", "15m", "1h", "6h", "12h", "24h", "2d", "7d", "30d"]
+  }
+}

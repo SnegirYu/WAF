@@ -1,0 +1,98 @@
+{% extends "accounts/admin/base.html" %}
+{% block title %}Забаненные IP{% endblock %}
+{% block page_title %}Забаненные IP-адреса{% endblock %}
+{% block content %}
+
+{% if messages %}
+  {% for message in messages %}
+    <div class="alert {% if message.tags == 'error' %}alert-error{% else %}alert-success{% endif %}">
+      {{ message }}
+    </div>
+  {% endfor %}
+{% endif %}
+
+<div class="card">
+  <div class="card-title" style="display:flex;align-items:center;justify-content:space-between;">
+    <span>Активные блокировки IP</span>
+    <span style="font-size:12px;color:#64748b;">Всего: {{ banned|length }}</span>
+  </div>
+
+  {% if banned %}
+    <table>
+      <thead>
+        <tr>
+          <th>IP-адрес</th>
+          <th>Сайт</th>
+          <th>Владелец</th>
+          <th>Причина</th>
+          <th>Атак</th>
+          <th>Заблокирован</th>
+          <th>Истекает</th>
+          <th>Статус</th>
+          <th>Действие</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for ban in banned %}
+        <tr>
+          <td>
+            <code style="background:#0f1117;padding:2px 6px;border-radius:4px;color:#f87171;font-size:12px;">
+              {{ ban.ip_address }}
+            </code>
+          </td>
+          <td style="color:#a5b4fc;">{{ ban.site.domain }}</td>
+          <td>
+            <a href="{% url 'admin_user_detail' ban.site.user.id %}"
+               style="color:#94a3b8;text-decoration:none;">
+              {{ ban.site.user.username }}
+            </a>
+          </td>
+          <td style="max-width:220px;font-size:12px;color:#cbd5e1;">
+            {{ ban.reason|truncatechars:80 }}
+          </td>
+          <td style="text-align:center;">
+            <span class="badge badge-red">{{ ban.attack_count }}</span>
+          </td>
+          <td style="color:#64748b;font-size:12px;white-space:nowrap;">
+            {{ ban.banned_at|date:"d.m.Y H:i" }}
+          </td>
+          <td style="font-size:12px;white-space:nowrap;">
+            {% if ban.is_expired %}
+              <span class="badge badge-yellow">истёк</span>
+            {% else %}
+              <span style="color:#94a3b8;">{{ ban.expires_at|date:"d.m.Y H:i" }}</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if ban.is_expired %}
+              <span class="badge badge-yellow">Просрочен</span>
+            {% else %}
+              <span class="badge badge-red">Активен</span>
+            {% endif %}
+          </td>
+          <td>
+            <form method="post" action="{% url 'admin_unban_ip' ban.id %}">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-sm btn-success"
+                      onclick="return confirm('Разблокировать {{ ban.ip_address }}?')">
+                Разбанить
+              </button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <div style="padding:48px;text-align:center;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#334155" stroke-width="1.5"
+           style="width:48px;height:48px;margin-bottom:16px;">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>
+      </svg>
+      <p style="color:#64748b;font-size:14px;">Заблокированных IP-адресов нет</p>
+    </div>
+  {% endif %}
+</div>
+
+{% endblock %}

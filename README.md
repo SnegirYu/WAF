@@ -17,3 +17,8 @@ docker ps -a
 docker-compose exec -it имяконтейнера-web-1 python manage.py createsuperuser
 ```
 Для работы входа через Oauth GitHub необходимо зайти в панель localhost/admin/  -> social applications -> add и добавить client id и secret key.
+
+Протестировать защиту форм и API можно следующей командой:
+```
+docker exec -it имяконтейнера-web-1 python manage.py test accounts.tests_security
+```

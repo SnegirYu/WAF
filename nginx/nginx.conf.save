@@ -28,8 +28,8 @@ http {
         http2 on;
         server_name 403118.vm.spacecore.network;
 
-        ssl_certificate /ssl/letsencrypt/live/403118.vm.spacecore.network/fullchain.pem;
-        ssl_certificate_key /ssl/letsencrypt/live/403118.vm.spacecore.network/privkey.pem;
+        ssl_certificate /ssl/cert/fullchain.pem;
+        ssl_certificate_key /ssl/cert/privkey.pem;
 
         ssl_protocols TLSv1.2 TLSv1.3;
         ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256;
@@ -51,10 +51,10 @@ http {
     server {
         listen 8001 ssl;
         http2 on;
-        server_name 403118.vm.spacecore.network;
+        server_name _;
 
-        ssl_certificate /ssl/letsencrypt/live/403118.vm.spacecore.network/fullchain.pem;
-        ssl_certificate_key /ssl/letsencrypt/live/403118.vm.spacecore.network/privkey.pem;
+        ssl_certificate /ssl/cert/fullchain.pem;
+        ssl_certificate_key /ssl/privkey.pem;
 
         ssl_protocols TLSv1.2 TLSv1.3;
         ssl_ciphers HIGH:!aNULL:!MD5;

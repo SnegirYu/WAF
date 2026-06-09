@@ -30,6 +30,27 @@ class User(AbstractUser):
     def is_admin_role(self):
         return self.role == self.ROLE_ADMIN or self.is_superuser
 
+    TARIFF_LIMITS = {
+        TARIFF_FREE:  {'sites': 1,  'traffic_gb': 1,   'label': 'Бесплатный'},
+        TARIFF_BASIC: {'sites': 5,  'traffic_gb': 10,  'label': 'Базовый'},
+        TARIFF_PRO:   {'sites': 20, 'traffic_gb': 100, 'label': 'Pro'},
+    }
+
+    def get_tariff_limits(self):
+        return self.TARIFF_LIMITS.get(self.tariff_plan, self.TARIFF_LIMITS[self.TARIFF_BASIC])
+
+    def get_sites_limit(self):
+        return self.get_tariff_limits()['sites']
+
+    def get_traffic_limit_gb(self):
+        return self.get_tariff_limits()['traffic_gb']
+
+    def get_sites_count(self):
+        return self.sites.count()
+
+    def can_add_site(self):
+        return self.get_sites_count() < self.get_sites_limit()
+
 
 class AccessToken(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='access_tokens')
@@ -137,7 +158,51 @@ class RequestLog(models.Model):
         verbose_name_plural = 'Логи запросов'
         ordering = ['-timestamp']
 
+class AttackAttempt(models.Model):
+    """Отслеживание подозрительных запросов для автоматического бана"""
+    site = models.ForeignKey(ProtectedSite, on_delete=models.CASCADE, related_name='attack_attempts')
+    ip_address = models.GenericIPAddressField()
+    rule_triggered = models.ForeignKey(WAFRule, on_delete=models.SET_NULL, null=True)
+    timestamp = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        indexes = [
+            models.Index(fields=['site', 'ip_address', 'timestamp']),
+        ]
+        verbose_name = 'Попытка атаки'
+        verbose_name_plural = 'Попытки атак'
+    
+    def __str__(self):
+        return f"{self.ip_address} - {self.rule_triggered.name if self.rule_triggered else 'Unknown'} at {self.timestamp}"
 
+class BannedIP(models.Model):
+    """Забаненные IP-адреса с автоматическим управлением"""
+    site = models.ForeignKey(ProtectedSite, on_delete=models.CASCADE, related_name='banned_ips')
+    ip_address = models.GenericIPAddressField()
+    reason = models.TextField()
+    banned_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    is_active = models.BooleanField(default=True)
+    attack_count = models.IntegerField(default=0, help_text="Количество атак перед баном")
+    time_window_minutes = models.IntegerField(default=10, help_text="Временное окно в минутах")
+    
+    class Meta:
+        unique_together = ('site', 'ip_address')
+        indexes = [
+            models.Index(fields=['site', 'ip_address', 'is_active', 'expires_at']),
+        ]
+        verbose_name = 'Забаненный IP'
+        verbose_name_plural = 'Забаненные IP'
+    
+    def __str__(self):
+        return f"{self.ip_address} on {self.site.domain} - Banned until {self.expires_at}"
+    
+    @property
+    def is_expired(self):
+        from django.utils import timezone
+        return timezone.now() > self.expires_at
+        
+        
 class AdminMessage(models.Model):
     """Сообщения пользователей администратору"""
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='admin_messages')

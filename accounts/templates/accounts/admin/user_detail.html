@@ -101,6 +101,7 @@
         <th>Добавлен</th>
         <th>Управление защитой</th>
         <th>Лимит трафика (МБ)</th>
+        <th>Удаление</th>
       </tr>
     </thead>
     <tbody>
@@ -140,6 +141,13 @@
             style="width:130px;background:#0f1117;border:1px solid #2d3250;border-radius:6px;
                    padding:5px 9px;color:#e2e8f0;font-size:13px;">
           <button class="btn btn-sm btn-primary">Применить</button>
+        </form>
+      </td>
+      <td>
+        <form method="post" onsubmit="return confirm('Удалить домен {{ site.domain }}?');">{% csrf_token %}
+          <input type="hidden" name="action" value="site_delete">
+          <input type="hidden" name="site_id" value="{{ site.id }}">
+          <button type="submit" class="btn btn-sm btn-danger">Удалить</button>
         </form>
       </td>
     </tr>
